@@ -547,9 +547,11 @@ function renderNotices() {
     if (todayItems.length > 0 && state.filterCategory === "ALL" && state.filterStatus === "ALL" && !state.searchQuery) {
         elements.todaySection.classList.remove("hidden");
         elements.todayBadgeCount.textContent = `${todayItems.length} items`;
+        const fragToday = document.createDocumentFragment();
         todayItems.forEach(n => {
-            elements.todayGrid.appendChild(createNoticeCardElement(n));
+            fragToday.appendChild(createNoticeCardElement(n));
         });
+        elements.todayGrid.appendChild(fragToday);
     } else {
         elements.todaySection.classList.add("hidden");
     }
@@ -573,9 +575,11 @@ function renderNotices() {
         elements.timelineView.classList.add("hidden");
 
         elements.noticesGrid.replaceChildren();
+        const fragCards = document.createDocumentFragment();
         filtered.forEach(n => {
-            elements.noticesGrid.appendChild(createNoticeCardElement(n));
+            fragCards.appendChild(createNoticeCardElement(n));
         });
+        elements.noticesGrid.appendChild(fragCards);
     } else {
         elements.sectionViewTitle.textContent = "Campus Timeline & Calendar View";
         elements.noticesGrid.classList.add("hidden");
@@ -632,9 +636,11 @@ function renderTimelineView(notices) {
 
             const cardsContainer = document.createElement("div");
             cardsContainer.className = "bucket-cards";
+            const fragBucket = document.createDocumentFragment();
             items.forEach(item => {
-                cardsContainer.appendChild(createNoticeCardElement(item));
+                fragBucket.appendChild(createNoticeCardElement(item));
             });
+            cardsContainer.appendChild(fragBucket);
             bucketElem.appendChild(cardsContainer);
 
             elements.timelineView.appendChild(bucketElem);
@@ -647,7 +653,8 @@ function renderTimelineView(notices) {
 // ==========================================
 
 function setupEventListeners() {
-    // Search input
+    // Search input with debounce for smooth typing performance
+    let searchDebounceTimer = null;
     elements.searchInput.addEventListener("input", (e) => {
         state.searchQuery = e.target.value;
         if (state.searchQuery) {
@@ -655,7 +662,10 @@ function setupEventListeners() {
         } else {
             elements.searchClearBtn.classList.add("hidden");
         }
-        renderNotices();
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+            renderNotices();
+        }, 150);
     });
 
     elements.searchClearBtn.addEventListener("click", () => {
@@ -747,8 +757,8 @@ function setupEventListeners() {
     elements.noticeForm.addEventListener("submit", handleCreateNotice);
 
     // Weekly Digest Modal (Phase 4)
-    elements.btnWeeklyDigest.addEventListener("click", openWeeklyDigest);
-    elements.btnDigestRefresh.addEventListener("click", openWeeklyDigest);
+    elements.btnWeeklyDigest.addEventListener("click", () => openWeeklyDigest(false));
+    elements.btnDigestRefresh.addEventListener("click", () => openWeeklyDigest(true));
     elements.btnDigestCopy.addEventListener("click", copyDigestToClipboard);
     elements.digestCloseBtn.addEventListener("click", () => closeModal(elements.digestModal));
     elements.digestDismissBtn.addEventListener("click", () => closeModal(elements.digestModal));
@@ -769,13 +779,14 @@ function setupEventListeners() {
 // Phase 4: Weekly AI Digest Handlers
 // ==========================================
 
-async function openWeeklyDigest() {
+async function openWeeklyDigest(isRefresh = false) {
     openModal(elements.digestModal);
     elements.digestLoading.classList.remove("hidden");
     elements.digestContent.classList.add("hidden");
 
     try {
-        const res = await fetch("/api/digest");
+        const url = isRefresh ? "/api/digest?refresh=true" : "/api/digest";
+        const res = await fetch(url);
         const data = await res.json();
         if (data.success) {
             currentDigestData = data;

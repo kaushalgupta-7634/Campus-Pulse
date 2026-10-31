@@ -1,67 +1,71 @@
-"""
-Database module for Campus Pulse.
-Uses Python's built-in sqlite3 to store notices and events.
-"""
-
 import os
 import sqlite3
+import logging
 from typing import List, Dict, Any, Optional
+
+logger = logging.getLogger("campus_pulse.database")
 
 DB_NAME = os.getenv("DB_PATH", "campus.db")
 
 
 def get_db_connection() -> sqlite3.Connection:
-    """Creates a connection to the SQLite database with Row factory enabled."""
-    conn = sqlite3.connect(DB_NAME)
+    """Creates an optimized connection to the SQLite database."""
+    conn = sqlite3.connect(DB_NAME, timeout=10.0)
     conn.row_factory = sqlite3.Row
+    # Enable WAL mode and normal synchronous for high-throughput reads/writes
+    try:
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+    except Exception as e:
+        logger.debug(f"SQLite PRAGMA setup note: {e}")
     return conn
 
 
 def init_db() -> None:
-    """Initializes the database schema if tables do not exist."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    """Initializes the database schema and indexes if tables do not exist."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
 
-    # Create the notices table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS notices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            event_date TEXT,
-            event_time TEXT,
-            venue TEXT,
-            category TEXT,
-            is_urgent INTEGER DEFAULT 0,
-            raw_text TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        # Create the notices table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                event_date TEXT,
+                event_time TEXT,
+                venue TEXT,
+                category TEXT,
+                is_urgent INTEGER DEFAULT 0,
+                raw_text TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    conn.commit()
-    conn.close()
+        # Add performance indexes for rapid sorting and filtering
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notices_date ON notices(event_date);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notices_urgent ON notices(is_urgent);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notices_category ON notices(category);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notices_created ON notices(created_at DESC);")
+        conn.commit()
 
 
 def get_all_notices() -> List[Dict[str, Any]]:
     """Fetches all notices from the database ordered by event_date and creation time."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT id, title, event_date, event_time, venue, category, is_urgent, raw_text, created_at
-        FROM notices
-        ORDER BY 
-            CASE 
-                WHEN event_date IS NULL OR event_date = '' THEN 1 
-                ELSE 0 
-            END,
-            event_date ASC,
-            id DESC
-    """)
-    rows = cursor.fetchall()
-    conn.close()
-
-    # Convert rows to standard dictionaries
-    return [dict(row) for row in rows]
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, title, event_date, event_time, venue, category, is_urgent, raw_text, created_at
+            FROM notices
+            ORDER BY 
+                CASE 
+                    WHEN event_date IS NULL OR event_date = '' THEN 1 
+                    ELSE 0 
+                END,
+                event_date ASC,
+                id DESC
+        """)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
 def insert_notice(
@@ -74,58 +78,46 @@ def insert_notice(
     raw_text: Optional[str] = ""
 ) -> int:
     """Inserts a new notice into the database and returns the inserted row ID."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO notices (title, event_date, event_time, venue, category, is_urgent, raw_text)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (title, event_date, event_time, venue, category or "General", 1 if is_urgent else 0, raw_text or ""))
-
-    conn.commit()
-    inserted_id = cursor.lastrowid
-    conn.close()
-    return inserted_id
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO notices (title, event_date, event_time, venue, category, is_urgent, raw_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (title, event_date, event_time, venue, category or "General", 1 if is_urgent else 0, raw_text or ""))
+        conn.commit()
+        return cursor.lastrowid
 
 
 def delete_notice_by_id(notice_id: int) -> bool:
     """Deletes a notice by its ID. Returns True if a record was deleted, else False."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("DELETE FROM notices WHERE id = ?", (notice_id,))
-    conn.commit()
-    rows_affected = cursor.rowcount
-    conn.close()
-
-    return rows_affected > 0
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM notices WHERE id = ?", (notice_id,))
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 def toggle_notice_urgency(notice_id: int) -> Optional[int]:
     """Toggles the is_urgent flag (0 <-> 1) for a notice. Returns the new value or None if not found."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT is_urgent FROM notices WHERE id = ?", (notice_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
 
-    cursor.execute("SELECT is_urgent FROM notices WHERE id = ?", (notice_id,))
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
-        return None
-
-    new_urgent = 0 if row["is_urgent"] else 1
-    cursor.execute("UPDATE notices SET is_urgent = ? WHERE id = ?", (new_urgent, notice_id))
-    conn.commit()
-    conn.close()
-    return new_urgent
+        new_urgent = 0 if row["is_urgent"] else 1
+        cursor.execute("UPDATE notices SET is_urgent = ? WHERE id = ?", (new_urgent, notice_id))
+        conn.commit()
+        return new_urgent
 
 
 def seed_sample_data_if_empty() -> None:
     """Seeds sample notices if the table is currently empty for easy initial testing."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM notices")
-    count = cursor.fetchone()[0]
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM notices")
+        count = cursor.fetchone()[0]
 
     if count == 0:
         insert_notice(

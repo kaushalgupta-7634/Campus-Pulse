@@ -11,17 +11,42 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
+import logging
+import hashlib
+import time
+
+logger = logging.getLogger("campus_pulse.ai_service")
+
 # Ensure environment variables are loaded
 load_dotenv()
 
-# We never hardcode or print the API key
+# Singleton cached client instance
+_client_instance = None
+_client_api_key = None
+
+# In-memory digest cache with TTL
+_digest_cache = {
+    "hash": None,
+    "timestamp": 0.0,
+    "data": None
+}
+DIGEST_CACHE_TTL_SECONDS = 180.0  # 3 minutes
+
+
 def get_gemini_client():
-    """Initializes and returns the google-genai Client using GEMINI_API_KEY from environment."""
-    from google import genai
+    """Initializes and returns the cached google-genai Client using GEMINI_API_KEY."""
+    global _client_instance, _client_api_key
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         return None
-    return genai.Client(api_key=api_key)
+
+    if _client_instance is None or _client_api_key != api_key:
+        from google import genai
+        _client_instance = genai.Client(api_key=api_key)
+        _client_api_key = api_key
+        logger.info("Initialized Google GenAI singleton client.")
+
+    return _client_instance
 
 
 def extract_notice_with_gemini(raw_text: str) -> Dict[str, Any]:
@@ -184,10 +209,10 @@ def fallback_local_extraction(raw_text: str, notice: str = "") -> Dict[str, Any]
     }
 
 
-def generate_weekly_digest(notices: list) -> Dict[str, Any]:
+def generate_weekly_digest(notices: list, force_refresh: bool = False) -> Dict[str, Any]:
     """
     Synthesizes active campus notices into a concise, actionable weekly digest for students.
-    Uses Gemini when GEMINI_API_KEY is available, or provides a structured local summary fallback.
+    Features in-memory fingerprint caching to avoid redundant API calls and optimize latency.
     """
     if not notices:
         return {
@@ -199,12 +224,29 @@ def generate_weekly_digest(notices: list) -> Dict[str, Any]:
             "pro_tip": "Stay tuned or use Smart Input when you receive new announcements on your WhatsApp groups."
         }
 
+    # Compute fingerprint of current notices
+    fingerprint_raw = json.dumps(
+        sorted([(n.get("id"), n.get("is_urgent"), n.get("event_date"), n.get("title")) for n in notices], key=lambda x: str(x[0]))
+    )
+    current_hash = hashlib.md5(fingerprint_raw.encode()).hexdigest()
+    now = time.time()
+
+    # Return cached digest if notices haven't changed and TTL is valid
+    if not force_refresh and _digest_cache["hash"] == current_hash and (now - _digest_cache["timestamp"]) < DIGEST_CACHE_TTL_SECONDS:
+        if _digest_cache["data"]:
+            logger.info("Serving weekly digest from in-memory cache (0ms latency).")
+            return _digest_cache["data"]
+
     client = get_gemini_client()
     today_str = datetime.now().strftime("%Y-%m-%d")
 
     # If API key is not configured, generate a clean local summary
     if not client:
-        return fallback_weekly_digest(notices, is_fallback=True)
+        result = fallback_weekly_digest(notices, is_fallback=True)
+        _digest_cache["hash"] = current_hash
+        _digest_cache["timestamp"] = now
+        _digest_cache["data"] = result
+        return result
 
     from google.genai import types
 
@@ -273,7 +315,7 @@ Return valid JSON adhering to this exact schema:
 
             if response.text:
                 digest_data = json.loads(response.text)
-                return {
+                res_payload = {
                     "success": True,
                     "model_used": model_name,
                     "headline": digest_data.get("headline") or "Your Weekly Campus Briefing ⚡",
@@ -282,6 +324,10 @@ Return valid JSON adhering to this exact schema:
                     "key_events": digest_data.get("key_events") or [],
                     "pro_tip": digest_data.get("pro_tip") or ""
                 }
+                _digest_cache["hash"] = current_hash
+                _digest_cache["timestamp"] = now
+                _digest_cache["data"] = res_payload
+                return res_payload
         except Exception as e:
             last_error = e
             continue

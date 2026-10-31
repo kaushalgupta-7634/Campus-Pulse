@@ -4,16 +4,36 @@ Centralizes scattered campus notices and events into an intelligent dashboard.
 """
 
 import os
+import logging
 from flask import Flask, render_template, jsonify, request
 from dotenv import load_dotenv
 
 import database
 import ai_service
 
+# Configure structured application logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("campus_pulse.app")
+
 # Load environment variables from .env
 load_dotenv()
 
 app = Flask(__name__)
+
+
+@app.after_request
+def apply_security_and_cache_headers(response):
+    """Sets standard security headers and static asset caching policies."""
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=3600"
+    else:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    return response
 
 
 @app.route("/")
@@ -129,10 +149,12 @@ def extract_notice():
 def get_weekly_digest():
     """API endpoint to generate an intelligent AI weekly briefing of active notices."""
     try:
+        force_refresh = request.args.get("refresh", "false").lower() == "true"
         notices = database.get_all_notices()
-        digest = ai_service.generate_weekly_digest(notices)
+        digest = ai_service.generate_weekly_digest(notices, force_refresh=force_refresh)
         return jsonify(digest)
     except Exception as e:
+        logger.error(f"Digest generation failed: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
 
 

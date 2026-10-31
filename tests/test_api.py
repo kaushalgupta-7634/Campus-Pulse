@@ -192,3 +192,47 @@ def test_api_405_json_error(client):
     data = response.get_json()
     assert data["success"] is False
     assert "Method not allowed" in data["error"]
+
+
+def test_toggle_urgency_not_found(client):
+    """Test toggling urgency on a non-existent notice ID returns 404."""
+    response = client.patch("/api/notices/999999/urgency")
+    assert response.status_code == 404
+    data = response.get_json()
+    assert data["success"] is False
+    assert "Notice not found" in data["error"]
+
+
+def test_security_and_cache_headers(client):
+    """Test that responses include secure headers and cache directives."""
+    # Test API endpoint response headers
+    res_api = client.get("/api/status")
+    assert res_api.status_code == 200
+    assert res_api.headers.get("X-Content-Type-Options") == "nosniff"
+    assert res_api.headers.get("X-Frame-Options") == "SAMEORIGIN"
+    assert "no-store" in res_api.headers.get("Cache-Control", "")
+
+    # Test static assets have public caching header
+    res_static = client.get("/static/css/style.css")
+    assert res_static.status_code == 200
+    assert "public" in res_static.headers.get("Cache-Control", "")
+
+
+def test_digest_caching_and_refresh(client):
+    """Test that weekly digest endpoint supports memoization and refresh flag."""
+    # First call (generates/fetches digest)
+    res1 = client.get("/api/digest")
+    assert res1.status_code == 200
+    data1 = res1.get_json()
+    assert data1["success"] is True
+
+    # Second call (serves from in-memory cache)
+    res2 = client.get("/api/digest")
+    assert res2.status_code == 200
+    data2 = res2.get_json()
+    assert data2["headline"] == data1["headline"]
+
+    # Third call with force refresh
+    res3 = client.get("/api/digest?refresh=true")
+    assert res3.status_code == 200
+    assert res3.get_json()["success"] is True

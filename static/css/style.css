@@ -61,6 +61,29 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+/* Accessibility Skip Link */
+.skip-link {
+    position: absolute;
+    top: -60px;
+    left: 1.5rem;
+    background: var(--primary);
+    color: #ffffff;
+    padding: 0.6rem 1.2rem;
+    border-radius: var(--radius-sm);
+    z-index: 9999;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-decoration: none;
+    box-shadow: 0 4px 14px var(--primary-glow);
+    transition: top 0.2s ease-in-out;
+}
+
+.skip-link:focus {
+    top: 1rem;
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+}
+
 .app-shell {
     max-width: 1280px;
     margin: 0 auto;

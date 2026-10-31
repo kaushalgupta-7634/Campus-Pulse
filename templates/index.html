@@ -13,6 +13,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
+    <!-- Accessibility Skip Link -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     <div class="app-shell">
         <!-- Top Navigation Bar -->
         <header class="navbar" role="banner">
@@ -43,7 +46,7 @@
         </header>
 
         <!-- Main Dashboard View -->
-        <main class="dashboard-container" role="main">
+        <main id="main-content" class="dashboard-container" role="main">
             <!-- Hero / Quick Stats Cards -->
             <section class="stats-grid" aria-label="Campus Notice Statistics">
                 <div class="stat-card">
