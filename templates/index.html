@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Pulse | Intelligent Student Notice Board</title>
+    <meta name="description" content="AI-powered campus notice board bringing WhatsApp forwards, emails, and event details into one unified, intelligent place.">
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Main Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-shell">
+        <!-- Top Navigation Bar -->
+        <header class="navbar" role="banner">
+            <div class="nav-brand">
+                <div class="brand-logo" aria-hidden="true">
+                    <span class="pulse-icon">⚡</span>
+                </div>
+                <div class="brand-text">
+                    <h1>Campus Pulse</h1>
+                    <span class="brand-tagline">Single Source of Campus Truth</span>
+                </div>
+            </div>
+
+            <div class="nav-actions">
+                <div id="api-status-badge" class="status-badge" role="status" title="Status of Gemini AI Integration">
+                    <span class="status-dot" aria-hidden="true"></span>
+                    <span id="api-status-text">Checking AI...</span>
+                </div>
+                <button id="btn-weekly-digest" class="btn btn-secondary" aria-label="Open AI Weekly Briefing: What do I need to know this week?">
+                    <span aria-hidden="true">✨</span>
+                    <span>What do I need to know this week?</span>
+                </button>
+                <button id="btn-open-smart-input" class="btn btn-primary" aria-label="Open Smart Input to add campus notice">
+                    <span class="plus-icon" aria-hidden="true">+</span>
+                    <span>Smart Input</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Dashboard View -->
+        <main class="dashboard-container" role="main">
+            <!-- Hero / Quick Stats Cards -->
+            <section class="stats-grid" aria-label="Campus Notice Statistics">
+                <div class="stat-card">
+                    <div class="stat-icon icon-total" aria-hidden="true">📋</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Total Notices</span>
+                        <p id="stat-total" class="stat-value">0</p>
+                    </div>
+                </div>
+                <div class="stat-card urgent-highlight">
+                    <div class="stat-icon icon-urgent" aria-hidden="true">🚨</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Urgent Deadlines</span>
+                        <p id="stat-urgent" class="stat-value">0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon icon-today" aria-hidden="true">🎯</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Needs Attention Today</span>
+                        <p id="stat-today" class="stat-value">0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon icon-upcoming" aria-hidden="true">📅</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Upcoming This Month</span>
+                        <p id="stat-upcoming" class="stat-value">0</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Search, Filter & Controls Toolbar -->
+            <section class="toolbar" aria-label="Filter and sort notices">
+                <div class="toolbar-top-row">
+                    <div class="search-box">
+                        <span class="search-icon" aria-hidden="true">🔍</span>
+                        <label for="search-input" class="visually-hidden">Search notices, venues, keywords</label>
+                        <input type="text" id="search-input" placeholder="Search notices, venues, keywords..." aria-label="Search notices">
+                        <button type="button" id="search-clear-btn" class="search-clear hidden" aria-label="Clear search input">×</button>
+                    </div>
+
+                    <!-- View Mode Toggle (Cards vs Timeline) -->
+                    <div class="view-mode-toggle" role="group" aria-label="View Mode Toggle">
+                        <button type="button" id="view-mode-cards" class="btn-toggle active" title="Cards Grid View" aria-label="Switch to cards view">
+                            <span aria-hidden="true">📋</span>
+                            <span>Cards</span>
+                        </button>
+                        <button type="button" id="view-mode-timeline" class="btn-toggle" title="Timeline & Calendar View" aria-label="Switch to calendar and timeline view">
+                            <span aria-hidden="true">📅</span>
+                            <span>Calendar / Timeline</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Category Filter Chips -->
+                <div class="filter-group">
+                    <span class="filter-label" id="category-filter-label">Category:</span>
+                    <div class="filter-chips" id="category-chips" role="group" aria-labelledby="category-filter-label">
+                        <button type="button" class="chip active" data-category="ALL">All</button>
+                        <button type="button" class="chip" data-category="Exam/Deadline">Exams & Deadlines</button>
+                        <button type="button" class="chip" data-category="Club/Cultural">Clubs & Cultural</button>
+                        <button type="button" class="chip" data-category="Placement">Placements</button>
+                        <button type="button" class="chip" data-category="Academic">Academic</button>
+                        <button type="button" class="chip" data-category="Sports">Sports</button>
+                        <button type="button" class="chip" data-category="General">General</button>
+                    </div>
+                </div>
+
+                <!-- Secondary Filter & Sort Row -->
+                <div class="toolbar-sub-row">
+                    <div class="status-filters-group">
+                        <span class="filter-label" id="status-filter-label">Status:</span>
+                        <div class="status-chips" id="status-chips" role="group" aria-labelledby="status-filter-label">
+                            <button type="button" class="chip-status active" data-status="ALL">All</button>
+                            <button type="button" class="chip-status chip-urgent" data-status="urgent"><span aria-hidden="true">🚨</span> Urgent</button>
+                            <button type="button" class="chip-status chip-today" data-status="today"><span aria-hidden="true">⚡</span> Today</button>
+                            <button type="button" class="chip-status chip-upcoming" data-status="upcoming"><span aria-hidden="true">📅</span> Upcoming</button>
+                            <button type="button" class="chip-status chip-expired" data-status="expired"><span aria-hidden="true">⌛</span> Past</button>
+                        </div>
+                    </div>
+
+                    <div class="sort-group">
+                        <label for="sort-select" class="filter-label">Sort by:</label>
+                        <select id="sort-select" class="sort-select">
+                            <option value="date-asc">📅 Soonest Event First</option>
+                            <option value="urgent-first">🚨 Most Urgent First</option>
+                            <option value="newest">✨ Recently Added</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Attention Today Spotlight Section -->
+            <section id="today-spotlight-section" class="spotlight-section hidden" aria-labelledby="today-heading">
+                <div class="section-header">
+                    <h2 class="section-title" id="today-heading">
+                        <span class="pulse-indicator" aria-hidden="true"></span>
+                        Needs Attention Today
+                    </h2>
+                    <span class="badge-urgent-count" id="today-badge-count">0 items</span>
+                </div>
+                <div id="today-cards-grid" class="cards-grid">
+                    <!-- Today cards injected here -->
+                </div>
+            </section>
+
+            <!-- All Notices Section -->
+            <section class="notices-section" aria-labelledby="section-view-title">
+                <div class="section-header">
+                    <h2 class="section-title" id="section-view-title">All Campus Notices</h2>
+                    <span class="notices-count-text" id="notices-count-label" aria-live="polite">Loading notices...</span>
+                </div>
+
+                <!-- Empty State Message -->
+                <div id="empty-state" class="empty-state hidden" role="status">
+                    <div class="empty-illustration" aria-hidden="true">📭</div>
+                    <h3 class="empty-state-title">No Notices Found</h3>
+                    <p id="empty-state-msg">There are no notices matching your current filter. Add one with Smart Input!</p>
+                </div>
+
+                <!-- Cards Grid View -->
+                <div id="notices-cards-grid" class="cards-grid">
+                    <!-- Dynamic notice cards injected safely here by JavaScript -->
+                </div>
+
+                <!-- Calendar / Timeline View (Phase 3) -->
+                <div id="notices-timeline-view" class="timeline-view hidden">
+                    <!-- Dynamic timeline date buckets injected safely here by JavaScript -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Smart Input Modal (Phase 2 AI Smart Input & Manual Fallback) -->
+        <div id="notice-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <div class="modal-card modal-card-wide">
+                <div class="modal-header">
+                    <div class="modal-title-group">
+                        <span class="modal-badge" aria-hidden="true">✨ Smart Input</span>
+                        <h2 id="modal-title">Add Campus Notice</h2>
+                    </div>
+                    <button type="button" id="modal-close-btn" class="btn-close" aria-label="Close Add Notice dialog">&times;</button>
+                </div>
+
+                <div class="modal-tabs" role="tablist" aria-label="Input Method Options">
+                    <button type="button" id="tab-btn-smart" class="modal-tab active" role="tab" aria-selected="true" aria-controls="smart-input-panel">
+                        <span aria-hidden="true">✨</span>
+                        <span>Paste Messy Text (AI Extract)</span>
+                    </button>
+                    <button type="button" id="tab-btn-manual" class="modal-tab" role="tab" aria-selected="false" aria-controls="manual-input-panel">
+                        <span aria-hidden="true">✏️</span>
+                        <span>Manual Entry</span>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Smart AI Extraction Panel -->
+                    <div id="smart-input-panel" class="input-panel active" role="tabpanel" aria-labelledby="tab-btn-smart">
+                        <div class="smart-input-intro">
+                            <p class="modal-desc">
+                                Paste any raw forwarded WhatsApp message, email snippet, or poster caption. Gemini AI will automatically extract the title, date, time, venue, category, and urgency into a clean card!
+                            </p>
+                            <div class="sample-chips-row" role="group" aria-label="Quick sample notice templates">
+                                <span class="sample-label">Try a sample notice:</span>
+                                <button type="button" class="btn-sample-chip" data-sample="whatsapp" aria-label="Load WhatsApp Fest Forward sample">🔥 WhatsApp Fest Forward</button>
+                                <button type="button" class="btn-sample-chip" data-sample="exam" aria-label="Load Urgent Exam Alert sample">⚠️ Urgent Exam Alert</button>
+                                <button type="button" class="btn-sample-chip" data-sample="placement" aria-label="Load Placement Drive sample">💼 Placement Drive</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="smart-raw-input">Messy Notice / WhatsApp Forward <span class="required" aria-hidden="true">*</span></label>
+                            <textarea id="smart-raw-input" rows="5" placeholder="e.g. *URGENT NOTICE* 📢 All final year students please note that Google off-campus drive applications close on 2026-11-06 at 6 PM sharp..."></textarea>
+                        </div>
+
+                        <div class="ai-action-row">
+                            <button type="button" id="btn-ai-extract" class="btn btn-primary btn-ai-pulse" aria-label="Extract details using Gemini AI">
+                                <span class="ai-sparkle" aria-hidden="true">✨</span>
+                                <span id="extract-btn-text">Extract with Gemini AI</span>
+                            </button>
+                            <!-- Live region for extraction announcements -->
+                            <span id="ai-extract-status" class="ai-extract-status hidden" aria-live="polite"></span>
+                        </div>
+
+                        <!-- Extracted Details Preview Box -->
+                        <div id="ai-extracted-preview" class="extracted-preview-box hidden" aria-labelledby="preview-title" role="region">
+                            <div class="preview-header">
+                                <span class="preview-badge" aria-hidden="true">✨ AI Extracted Card</span>
+                                <span id="preview-category-badge" class="card-badge badge-category">Category</span>
+                            </div>
+                            <h3 id="preview-title" class="preview-title"></h3>
+                            <div class="preview-meta-grid">
+                                <div class="preview-meta-item">
+                                    <span class="preview-meta-label">📅 Date & Time:</span>
+                                    <span id="preview-datetime" class="preview-meta-val"></span>
+                                </div>
+                                <div class="preview-meta-item">
+                                    <span class="preview-meta-label">📍 Venue:</span>
+                                    <span id="preview-venue" class="preview-meta-val"></span>
+                                </div>
+                                <div class="preview-meta-item">
+                                    <span class="preview-meta-label">🚨 Urgency:</span>
+                                    <span id="preview-urgent" class="preview-meta-val"></span>
+                                </div>
+                            </div>
+                            <p id="preview-summary" class="preview-summary-text"></p>
+                            <div class="preview-actions">
+                                <button type="button" id="btn-preview-save" class="btn btn-primary">
+                                    ✅ Confirm & Add to Board
+                                </button>
+                                <button type="button" id="btn-preview-edit" class="btn btn-secondary">
+                                    ✏️ Edit Details First
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Manual Details / Edit Form Panel -->
+                    <div id="manual-input-panel" class="input-panel hidden" role="tabpanel" aria-labelledby="tab-btn-manual">
+                        <form id="notice-form">
+                            <div class="form-group">
+                                <label for="form-title">Notice Title <span class="required" aria-hidden="true">*</span></label>
+                                <input type="text" id="form-title" required placeholder="e.g. Hackathon Registration Deadline">
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="form-date">Event Date</label>
+                                    <input type="date" id="form-date">
+                                </div>
+                                <div class="form-group">
+                                    <label for="form-time">Event Time</label>
+                                    <input type="text" id="form-time" placeholder="e.g. 10:00 AM or 2:00 PM">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="form-venue">Venue / Location</label>
+                                    <input type="text" id="form-venue" placeholder="e.g. Audi B or Online Portal">
+                                </div>
+                                <div class="form-group">
+                                    <label for="form-category">Category</label>
+                                    <select id="form-category">
+                                        <option value="General">General</option>
+                                        <option value="Exam/Deadline">Exam / Deadline</option>
+                                        <option value="Club/Cultural">Club / Cultural</option>
+                                        <option value="Placement">Placement / Internship</option>
+                                        <option value="Academic">Academic</option>
+                                        <option value="Sports">Sports</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group checkbox-group">
+                                <label for="form-urgent" class="custom-checkbox">
+                                    <input type="checkbox" id="form-urgent" aria-label="Flag as Urgent Priority">
+                                    <span class="checkbox-checkmark" aria-hidden="true"></span>
+                                    <span class="checkbox-text">Flag as Urgent Priority 🚨</span>
+                                </label>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="form-raw-text">Original Notice / Forwarded Text</label>
+                                <textarea id="form-raw-text" rows="3" placeholder="Original raw text will be stored here..."></textarea>
+                            </div>
+
+                            <div class="modal-footer">
+                                <button type="button" id="modal-cancel-btn" class="btn btn-secondary">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Save to Board</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Weekly Digest Modal (Phase 4 AI Student Briefing) -->
+        <div id="digest-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="digest-title">
+            <div class="modal-card modal-card-wide">
+                <div class="modal-header">
+                    <div class="modal-title-group">
+                        <span class="modal-badge" aria-hidden="true">✨ Gemini AI Weekly Synthesis</span>
+                        <h2 id="digest-title">What Do I Need To Know This Week?</h2>
+                    </div>
+                    <button type="button" id="digest-close-btn" class="btn-close" aria-label="Close Weekly Digest dialog">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <!-- Loading state indicator with polite live region -->
+                    <div id="digest-loading" class="digest-loading hidden" aria-live="polite">
+                        <div class="digest-spinner" aria-hidden="true">⚡</div>
+                        <p class="digest-loading-title">Synthesizing your campus schedule...</p>
+                        <p class="digest-loading-sub">Analyzing active deadlines, urgent notices, and upcoming events with Gemini.</p>
+                    </div>
+
+                    <!-- Rendered Digest Box with polite live region -->
+                    <div id="digest-content" class="digest-content" aria-live="polite">
+                        <div class="digest-header-banner">
+                            <h3 id="digest-headline" class="digest-headline">Loading digest...</h3>
+                            <p id="digest-overview" class="digest-overview"></p>
+                        </div>
+
+                        <!-- Urgent Items Section -->
+                        <div id="digest-urgent-box" class="digest-section-box urgent-box">
+                            <h4 class="digest-section-heading">🚨 Critical Deadlines & Urgencies</h4>
+                            <div id="digest-urgent-list" class="digest-items-list">
+                                <!-- Injected dynamically and safely -->
+                            </div>
+                        </div>
+
+                        <!-- Key Events Section -->
+                        <div id="digest-events-box" class="digest-section-box events-box">
+                            <h4 class="digest-section-heading">📅 Notable Events & Sessions</h4>
+                            <div id="digest-events-list" class="digest-items-list">
+                                <!-- Injected dynamically and safely -->
+                            </div>
+                        </div>
+
+                        <!-- Pro Tip Box -->
+                        <div id="digest-tip-box" class="digest-tip-box">
+                            <div class="tip-icon" aria-hidden="true">💡</div>
+                            <div class="tip-body">
+                                <strong>Campus Pro-Tip:</strong>
+                                <p id="digest-pro-tip"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer digest-footer">
+                        <button type="button" id="btn-digest-copy" class="btn btn-secondary" aria-label="Copy weekly briefing to clipboard">
+                            <span aria-hidden="true">📋</span>
+                            <span>Copy Digest</span>
+                        </button>
+                        <button type="button" id="btn-digest-refresh" class="btn btn-secondary" aria-label="Regenerate weekly briefing with Gemini AI">
+                            <span aria-hidden="true">🔄</span>
+                            <span>Regenerate</span>
+                        </button>
+                        <button type="button" id="digest-dismiss-btn" class="btn btn-primary">Done</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notifications Container -->
+        <div id="toast-container" class="toast-container" aria-live="polite"></div>
+    </div>
+
+    <!-- Main Client-Side Logic -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
